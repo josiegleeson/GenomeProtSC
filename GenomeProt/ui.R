@@ -102,8 +102,8 @@ ui <- dashboardPage(
                        
                        # Choices
                        radioButtons("sequencing_type", h5(tags$b("Select sequencing type:")),
-                                    choices = c("Long-read (ONT, PacBio)" = "long-read", 
-                                                "Short-read" = "short-read")),
+                                    choices = c("Long-read bulk" = "long-read-bulk", 
+                                                "Long-read single-cell" = "long-read-sc")),
                        radioButtons("input_type", h5(tags$b("Select input type:")),
                                     choices = c("FASTQs" = "fastq_input",
                                                 "BAMs" = "bam_input",
@@ -140,26 +140,17 @@ ui <- dashboardPage(
                          numericInput("user_threads", label = "CPUs:", value = 4, min = 1, max = 46, step = 1),
                          #h5("Map FASTQs, identify (in long-reads) and quantify isoforms, and generate the database"),
                          fileInput("user_reference_genome", "Upload reference genome FASTA:", NULL, buttonLabel = "Browse...", multiple = FALSE),
-                         conditionalPanel(condition = "input.sequencing_type == 'short-read'",
-                                          fileInput("transcriptome_file", "Upload reference transcriptome FASTA:", NULL, buttonLabel = "Browse...", multiple = FALSE)
-                         ),
                          fileInput("user_fastq_files", "Upload FASTQ file(s):", NULL, buttonLabel = "Browse...", multiple = TRUE)
                        ),
                        conditionalPanel(
                          condition = "input.input_type == 'bam_input'",
                          numericInput("user_threads", label = "CPUs:", value = 4, min = 1, max = 46, step = 1),
-                         conditionalPanel(condition = "input.sequencing_type == 'short-read'",
-                                          fileInput("user_reference_genome_bam", "Upload reference genome FASTA:", NULL, buttonLabel = "Browse...", multiple = FALSE)),
                          fileInput("user_bam_files", "Upload BAM file(s):", NULL, buttonLabel = "Browse...", multiple = TRUE)
                        ),
                        conditionalPanel(
-                         condition = "input.input_type == 'gtf_input' & input.sequencing_type == 'long-read'",
+                         condition = "input.input_type == 'gtf_input'",
                          fileInput("user_gtf_file", "Upload 'bambu_transcript_annotations.gtf':", NULL, buttonLabel = "Browse...", multiple = FALSE),
                          fileInput("user_tx_count_file", "Upload 'bambu_transcript_counts.txt' (optional):", NULL, buttonLabel = "Browse...", multiple = FALSE)
-                       ),
-                       conditionalPanel(
-                         condition = "input.input_type == 'gtf_input' & input.sequencing_type == 'short-read'",
-                         fileInput("user_tx_count_file", "Upload transcript counts:", NULL, buttonLabel = "Browse...", multiple = FALSE)
                        ),
                        actionButton("db_submit_button", "Submit", class = "btn btn-primary")
                 ),
