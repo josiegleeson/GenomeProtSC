@@ -6,210 +6,40 @@ library(shinyjs)
 flames_server <- function(input, output, session) {
   
   # to start with fastqs a user must upload a genome, reference gtf, fastq files
-  req(input$user_reference_genome$datapath, input$user_reference_gtf$datapath, input$user_fastq_files$datapath)  # required
+  req(input$user_reference_gtf$datapath, input$user_fastq_files$datapath)  # required
   
   # store session ID
   session_id <- session$token
   # set output dir
-  outdir_bam <- paste0(session_id, "/mapping_output")
+  outdir_flames <- paste0(session_id, "/singlecell_output")
   # create output dir
-  system(paste0("mkdir ", outdir_bam))
+  system(paste0("mkdir ", outdir_flames))
   
-  # optionally export genome from R
-  # if (organism == "human") {
-  #   library(BSgenome.Hsapiens.UCSC.hg38)
-  #   genomedb <- BSgenome.Hsapiens.UCSC.hg38
-  # } else if (organism == "mouse") {
-  #   library(BSgenome.Mmusculus.UCSC.mm39)
-  #   genomedb <- BSgenome.Mmusculus.UCSC.mm39
-  # } else if (organism == "celegans") {
-  #   library(BSgenome.Celegans.UCSC.ce11)
-  #   genomedb <- BSgenome.Celegans.UCSC.ce11
-  # } else if (organism == "drosophila") {
-  #   library(BSgenome.Dmelanogaster.UCSC.dm6)
-  #   genomedb <- BSgenome.Dmelanogaster.UCSC.dm6
-  # } else if (organism == "rat") {
-  #   library(BSgenome.Rnorvegicus.UCSC.rn7)
-  #   genomedb <- BSgenome.Rnorvegicus.UCSC.rn7
-  # } else if (organism == "zebrafish") {
-  #   library(BSgenome.Drerio.UCSC.danRer11)
-  #   genomedb <- BSgenome.Drerio.UCSC.danRer11
-  # }
-  # export(genomedb, "genome.fasta.gz", verbose=T, compress=T, format="fasta")
-  
-  # create dataframe with sample details and add prefix column 
-  user_fastq_files_df <- input$user_fastq_files %>% 
-    mutate(file_prefix = str_replace_all(name, c("\\.fastq\\.gz$" = "", "\\.fastq$" = "", "\\.fq$" = "", "\\.fa$" = "", "\\.fasta$" = "")))
-  
-  print(user_fastq_files_df)
-  
-  # map reads
-  if (input$sequencing_type == "long-read") { # for long reads, use minimap2
-    
-    # define index file name for genome
-    index_file <- paste0(outdir_bam, "/", str_replace_all(input$user_reference_genome$name, c("\\.fa$" = "", "\\.fasta$" = "")), ".mmi")
-    
-    # define minimap2 command to index genome
-    # supply conda env here if local installation
-    minimap2_index_command <- paste0("minimap2 -ax splice:hq -d ", index_file, " ", input$user_reference_genome$datapath)
-    
-    print(minimap2_index_command)
-    
-    # run minimap2 indexing
-    system(minimap2_index_command)
-    
-    # for each fastq file
-    for (i in 1:nrow(user_fastq_files_df)) {
-      
-      fastq_file <- user_fastq_files_df$datapath[i] # set file path
-      file_prefix <- user_fastq_files_df$file_prefix[i] # get file prefix
-      
-      # define command to map fastq file reads to the indexed genome file with minimap2
-      # supply conda env here if local installation
-      minimap2_command <- paste0("minimap2 -t ", input$user_threads, " -ax splice:hq --sam-hit-only --secondary=no ", index_file, " ", fastq_file, " | samtools view -bh | samtools sort -@ ", input$user_threads, " -o ", outdir_bam, "/", file_prefix, ".bam")
-      
-      print(minimap2_command)
-      
-      # run mapping 
-      system(minimap2_command)
-      
-    }
-    
-  } else if (input$sequencing_type == "short-read") { # for short reads, use salmon
-    
-    # generate salmon index
-    if ( grepl("\\.gz$", input$user_reference_genome$datapath) & grepl("\\.gz$", input$transcriptome_file$datapath)) {
-      
-      command_generate_decoy <- paste0("bash -c \"grep '^>' <(gunzip -c ", input$user_reference_genome$datapath, ") | cut -d ' ' -f 1 >", outdir_bam, "/decoys.txt",'\"')
-      command_sed <- paste0("sed -i -e 's/>//g' ", outdir_bam, "/decoys.txt")
-      command_ref_file <- paste0("cat ", input$transcriptome_file$datapath, " ", input$user_reference_genome$datapath, " >", outdir_bam, "/gentrome.fa.gz")
-      # supply conda env here if local installation
-      command_index <- paste0("salmon index -t  ", outdir_bam, "/gentrome.fa.gz -d ", outdir_bam, "/decoys.txt -p ", input$user_threads, " -i ", outdir_bam, "/salmon_index --gencode")
-      
-    } else {
-      
-      command_generate_decoy <- paste0("grep '^>' ", input$user_reference_genome$datapath, " | cut -d \" \" -f 1 >", outdir_bam, "/decoys.txt")
-      command_sed <- paste0("sed -i -e 's/>//g' ", outdir_bam, "/decoys.txt")
-      command_ref_file <- paste0("cat ", input$transcriptome_file$datapath, " ", input$user_reference_genome$datapath, " >", outdir_bam, "/gentrome.fa")
-      # supply conda env here if local installation
-      command_index <- paste0("salmon index -t  ", outdir_bam, "/gentrome.fa -d ", outdir_bam, "/decoys.txt -p ", input$user_threads, " -i ", outdir_bam, "/salmon_index --gencode")
-      
-    }
-    
-    # generate index
-    system(command_generate_decoy)
-    system(command_sed)
-    system(command_ref_file)
-    system(command_index)
-    
-    # determine paired end or single end
-    paired_end <- list(list(R1 = NULL, R2 = NULL))
-    single_end <- list()
-    
-    # for each fastq file
-    for (i in 1:nrow(user_fastq_files_df)) {
-      
-      file_name <- user_fastq_files_df$name[i]
-      
-      if (grepl("_R1", file_name)) {
-        
-        base_name <- sub("_R1(\\.fastq(\\.gz)?)$", "", file_name)
-        paired_end[[base_name]]$R1 <- user_fastq_files_df$datapath[i]
-        
-      } else if (grepl("_R2", file_name)) {
-        
-        base_name <- sub("_R2(\\.fastq(\\.gz)?)$", "", file_name)
-        paired_end[[base_name]]$R2 <- user_fastq_files_df$datapath[i]
-        
-      }
-      
-      if(!grepl("_R1", file_name) && !grepl("_R2", file_name)) {
-        
-        base_name <- sub("(\\.fastq(\\.gz)?)$", "", file_name)
-        single_end[[base_name]] <- user_fastq_files_df$datapath[i]
-        
-      } 
-    }
-    
-    # if there are paired end reads
-    if (length(paired_end) > 0) {
-      
-      for (base_name in names(paired_end)) {
-        # access R1 and R2 elements
-        R1_path <- paired_end[[base_name]]$R1
-        R2_path <- paired_end[[base_name]]$R2
-        
-        if (!is.null(R1_path) && !is.null(R2_path)) {
-          
-          # perform operations with R1 and R2
-          cat("Base Name:", base_name, "\t","R1 Path:", R1_path, "R2 Path:", R2_path, "\n")
-          
-          # define salmon command
-          # supply conda env here if local installation
-          command_salmon <- paste0("salmon quant -i ", outdir_bam,"/salmon_index -p ", input$user_threads ," -l A -1 ", R1_path," -2 ", R2_path, " --validateMappings -o ", outdir_bam,"/", base_name)
-          print(command_salmon)
-          # run salmon
-          system(command_salmon)
-          
-        }
-      }
-    }
-    
-    # if there are single end reads
-    if (length(single_end) > 0) {
-      for (base_name in names(single_end)) {
-        
-        print(single_end[[base_name]])
-        
-        # define salmon command
-        # supply conda env here if local installation
-        command_salmon <- paste0("salmon quant -i ", outdir_bam,"/salmon_index -p ", input$user_threads ," -l A -r ", single_end[[base_name]]," --validateMappings -o ", outdir_bam,"/", base_name)
-        print(command_salmon)
-        # run salmon
-        system(command_salmon)
-        
-      }
-    }
-    
-    # create count matrix
-    samples <- c(names(single_end),names(paired_end))
-    samples <- samples[samples != ""]
-    print(samples)
-    # set path to salmon quant files
-    files <- file.path(outdir_bam, samples, "quant.sf")
-    print(files)
-    names(files) <- samples
-    
-    # check if the files exist
-    print(all(file.exists(files)))
-    
-    # use tximport to import salmon quantification files
-    txi <- tximport(files, type = "salmon", txOut = TRUE)
-    
-    # import gtf to add gene information
-    gtf_data <- import(input$user_reference_gtf$datapath, format = "gtf")
-    
-    # convert GTF data to a data frame
-    gtf_df <- as.data.frame(gtf_data)
-    
-    # filter for relevant columns
-    transcript_gene_info <- gtf_df[gtf_df$type == "transcript", c("transcript_id", "gene_id")]
-    colnames(transcript_gene_info) <- c("TXNAME","GENEID")
-    
-    # convert counts object to df
-    count_df <- as.data.frame(txi$counts)
-    # set col names
-    count_df <-  count_df %>% mutate(TXNAME = rownames(count_df)) %>% dplyr::select(TXNAME, everything())
-    rownames(count_df) <- NULL
-    # merge tx counts and gene info
-    count_df_merged <- left_join(count_df, transcript_gene_info, by="TXNAME")
-    
-    count_df_merged <- count_df_merged %>% dplyr::select(TXNAME, GENEID, everything())
-    
-    # export short-read count data
-    write_tsv(count_df_merged, file = paste0(outdir_bam, "/transcript_counts.txt"), escape = "none", col_names = TRUE)
-    
+  # set genome
+  if (organism == "human") {
+    genome_file <- "refs/human.fa"
+  } else if (organism == "mouse") {
+    genome_file <- "refs/mouse.fa"
   }
+  
+  # FLAMES
+  command_run_flames <- paste0(
+    "Rscript bin/database_module/run-flames.R",
+    " -g ", genome_file,
+    " -a ", input$user_reference_gtf$datapath,
+    " -i ", input$user_fastq_files$datapath, # test
+    " -o ", outdir_flames, "/flames"
+  )
+  
+  # post-process with Seurat
+  command_run_flames <- paste0(
+    "Rscript bin/database_module/flames-postprocess.R",
+    " -i ", outdir_flames, "/flames",
+    " -o ", outdir_flames, "/seurat"
+  )
+  
+
+  
 }
 
 database_server <- function(input, output, session) {
@@ -221,10 +51,10 @@ database_server <- function(input, output, session) {
   # create output dir
   system(paste0("mkdir ", outdir_db))
 
-  db_gtf_file <- paste0(session_id, "/flames_output/bambu_transcript_annotations.gtf")
-  db_counts_file <- paste0(session_id, "/flames_output/transcript_counts.txt")
+  db_gtf_file <- paste0(session_id, "/singlecell_output/flames/")
+  db_counts_file <- paste0(session_id, "/singlecell_output/flames/")
   
-  bambu_files <- c(paste0(session_id, "/flames_output/bambu_transcript_annotations.gtf"), paste0(session_id, "/flames_output/transcript_counts.txt"), paste0(session_id, "/flames_output/novel_transcript_classes.csv"), paste0(session_id, "/flames_output/gffcompare.tmap.txt"))
+  flames_files <- c(paste0(session_id, "/singlecell_output/flames/bambu_transcript_annotations.gtf"), paste0(session_id, "/singlecell_output/flames/transcript_counts.txt"), paste0(session_id, "/singlecell_output/flames/novel_transcript_classes.csv"), paste0(session_id, "/singlecell_output/flames/gffcompare.tmap.txt"))
   
   # construct the command
   command_generate_proteome <- paste0(
