@@ -3,7 +3,7 @@ library(shinydashboard)
 library(shinyjs)
 
 ui <- dashboardPage(
-  dashboardHeader(title = "GenomeProt",
+  dashboardHeader(title = "GenomeProtSC",
                   dropdownMenu(type = "messages",
                                tags$li(HTML('<li><a href="https://biomedicalsciences.unimelb.edu.au/sbs-research-groups/physiology/Parker-laboratory-Metabolic-Proteomics" target="_blank"><i class="fa fa-user"></i><h4>About us</h4><p>Parker Laboratory</p></a></li>')),
                                tags$li(HTML('<li><a href="https://biomedicalsciences.unimelb.edu.au/sbs-research-groups/anatomy-and-physiology-research/stem-cell-and-developmental-biology/clark-lab" target="_blank"><i class="fa fa-user"></i><h4>About us</h4><p>Clark Laboratory</p></a></li>')),
@@ -11,18 +11,23 @@ ui <- dashboardPage(
                   )),
   # tabs
   dashboardSidebar(
-    sidebarMenu(menuItem("Welcome", tabName = "welcome", icon = icon("house")),
-                menuItem("Generate database", tabName = "db_generation", icon = icon("database")),
-                # commenting out proteomics for now
-                #menuItem("Analyse MS proteomics", tabName = "analyse_proteomics", icon = icon("gear")),
-                menuItem("Integrate data", tabName = "integration", icon = icon("code-merge")),
-                menuItem("Visualise results", tabName = "visualisation", icon = icon("chart-bar"))
+    sidebarMenu(menuItem("Welcome", tabName = "welcome"),
+                menuItem("README", tabName = "readme"),
+                menuItem("1. Generate database", tabName = "db_generation", icon = icon("database")),
+                menuItem("2. Run proteomics", tabName = "analyse_proteomics", icon = icon("gear")),
+                menuItem("3. Integrate data", tabName = "integration", icon = icon("arrows-turn-to-dots")),
+                menuItem("4. Visualisation", tabName = "visualisation", icon = icon("chart-simple"))
+                #menuItem("4b. Visualisation: IsoVis", tabName = "isovis", icon = icon("chart-simple"))
     )
   ),
   # body
   dashboardBody(
     useShinyjs(),  # shinyjs
     tags$head(
+      tags$link(rel = "shortcut icon", href = "favicon.ico"),
+      tags$link(rel = "apple-touch-icon", sizes = "180x180", href = "favicon.ico"),
+      tags$link(rel = "icon", type = "image/png", sizes = "32x32", href = "/favicon-32x32.png"),
+      tags$link(rel = "icon", type = "image/png", sizes = "16x16", href = "/favicon-16x16.png"),
       tags$style(HTML("
         .spinner {
           margin: 0 auto;
@@ -94,34 +99,41 @@ ui <- dashboardPage(
                 )
               )
       ),
+      tabItem(tabName = "readme",
+              fluidRow(
+                column(12,
+                       div(class = "box box-primary", style = "padding-right: 5%; padding-left: 5%; font-size:110%", 
+                           div(class = "box-body", shiny::includeMarkdown("../README.md")),
+                       )
+                )
+              )
+      ),
       tabItem(tabName = "db_generation", 
-              h2("Generate a custom proteogenomics database"),
-              h5("Creates an amino acid FASTA of all ORFs in your data to use as input for FragPipe/MaxQuant etc."),
+              h2("Run FLAMES and generate a protein database"),
+              h5("Saves the output from FLAMES and creates an amino acid FASTA of all potential ORFs for proteomics."),
               fluidRow(
                 column(6,
                        
                        # Choices
-                       radioButtons("sequencing_type", h5(tags$b("Select sequencing type:")),
-                                    choices = c("Long-read bulk" = "long-read-bulk", 
-                                                "Long-read single-cell" = "long-read-sc")),
-                       radioButtons("input_type", h5(tags$b("Select input type:")),
-                                    choices = c("FASTQs" = "fastq_input",
-                                                "BAMs" = "bam_input",
-                                                "GTF (and/or transcript counts)" = "gtf_input")),
+                       # radioButtons("sequencing_type", h5(tags$b("Select sequencing type:")),
+                       #              choices = c("Long-read (ONT, PacBio)" = "long-read", 
+                       #                          "Short-read" = "short-read")),
                        
                        # Constant options
+                       h3("Upload files:"),
+                       fileInput("user_reference_gtf", "Reference GENCODE annotation GTF:", NULL, buttonLabel = "Browse...", multiple = FALSE),
+                       fileInput("user_fastq_files", "Single-cell FASTQs (one per sample):", NULL, buttonLabel = "Browse...", multiple = TRUE),
+                       numericInput("user_threads", label = "CPUs:", value = 4, min = 2, max = 46, step = 1),
                        selectInput("organism", label = "Organism:", 
-                                   choices = list("Roundworm (C. elegans)" = "celegans", 
-                                                  "Fruit fly (D. melanogaster)" = "drosophila", 
-                                                  "Human (H. sapiens)" = "human", 
-                                                  "Mouse (M. musculus)" = "mouse", 
-                                                  "Rat (R. rattus)" = "rat", 
-                                                  "Zebrafish (D. rerio)" = "zebrafish"), 
+                                   choices = list("Human (H. sapiens)" = "human", 
+                                                  #"Roundworm (C. elegans)" = "celegans", 
+                                                  #"Fruit fly (D. melanogaster)" = "drosophila", 
+                                                  #"Rat (R. rattus)" = "rat", 
+                                                  #"Zebrafish (D. rerio)" = "zebrafish",
+                                                  "Mouse (M. musculus)" = "mouse"), 
                                    selected = "human"),
-                       # selectInput("database_type", label = "ORFs to be included in proteomedb:", 
-                       #             choices = list("canonical", "all"),
-                       #             selected = "all"),
-                       numericInput("min_orf_length", 
+                       h3("Protein database options:"),
+                       numericInput("min_orf_length",
                                     label = "ORF length (amino acids):", 
                                     value = 30),
                        h5(tags$b("Find short (10 to 'ORF length' amino acids) ORFs in UTRs of reference transcripts:")),
@@ -129,63 +141,43 @@ ui <- dashboardPage(
                                      value = FALSE, width = NULL),
                        checkboxInput("user_find_utr_3_orfs", label = "Downstream 3' ORFs",
                                      value = FALSE, width = NULL),
-                       numericInput("minimum_tx_count", 
-                                    label = "Minimum expression threshold (sum per transcript):", 
-                                    value = 5),
-                       fileInput("user_reference_gtf", "Upload reference annotation GTF:", NULL, buttonLabel = "Browse...", multiple = FALSE),
-                       
-                       # Variable options
-                       conditionalPanel(
-                         condition = "input.input_type == 'fastq_input'",
-                         numericInput("user_threads", label = "CPUs:", value = 4, min = 1, max = 46, step = 1),
-                         #h5("Map FASTQs, identify (in long-reads) and quantify isoforms, and generate the database"),
-                         fileInput("user_reference_genome", "Upload reference genome FASTA:", NULL, buttonLabel = "Browse...", multiple = FALSE),
-                         fileInput("user_fastq_files", "Upload FASTQ file(s):", NULL, buttonLabel = "Browse...", multiple = TRUE)
-                       ),
-                       conditionalPanel(
-                         condition = "input.input_type == 'bam_input'",
-                         numericInput("user_threads", label = "CPUs:", value = 4, min = 1, max = 46, step = 1),
-                         fileInput("user_bam_files", "Upload BAM file(s):", NULL, buttonLabel = "Browse...", multiple = TRUE)
-                       ),
-                       conditionalPanel(
-                         condition = "input.input_type == 'gtf_input'",
-                         fileInput("user_gtf_file", "Upload 'bambu_transcript_annotations.gtf':", NULL, buttonLabel = "Browse...", multiple = FALSE),
-                         fileInput("user_tx_count_file", "Upload 'bambu_transcript_counts.txt' (optional):", NULL, buttonLabel = "Browse...", multiple = FALSE)
-                       ),
+                       # numericInput("minimum_tx_count", 
+                       #              label = "Minimum expression threshold (sum per transcript):", 
+                       #              value = 5),
                        actionButton("db_submit_button", "Submit", class = "btn btn-primary")
                 ),
                 column(6,
-                       HTML("<h3>Download your results:</h3>"),
+                       h3("Download your results:"),
                        downloadButton("db_download_button", "Download results (zip)", disabled = TRUE, style = "width:70%;"), # initially disabled
                        div(id = "db-loading-container", class = "loading-container", div(class = "spinner"))
                 )
               )
       ),
-      # tabItem(tabName = "analyse_proteomics", 
-      #         h2("Run MetaMorpheus with your custom proteogenomics database to analyse MS proteomics data"),
-      #         h5("NOTE: this step requires significant computation and time (>8 CPUs and high memory requirements)"),
-      #         fluidRow(
-      #           column(4,
-      #                  selectInput("protease", label = "Protease:", 
-      #                              choices = list("trypsin" = "trypsin"), 
-      #                              selected = "trypsin"),
-      #                  numericInput("mm_cpu", 
-      #                               label = "CPUs", 
-      #                               value = 1),
-      #                  fileInput("user_mm_fasta", "Upload 'proteome_database.fasta'", NULL, buttonLabel = "Browse...", multiple = FALSE),
-      #                  fileInput("user_mm_data", "Upload mzML/raw file(s):", NULL, buttonLabel = "Browse...", multiple = TRUE),
-      #                  actionButton("proteomics_submit_button", "Submit", class = "btn btn-primary")
-      #           ),
-      #           column(6,
-      #                  HTML("<h3>Download your results:</h3>"),
-      #                  downloadButton("proteomics_download_button", "Download results (zip)", disabled = TRUE, style = "width:70%;"), # initially disabled
-      #                  div(id = "proteomics-loading-container", class = "loading-container", div(class = "spinner"))
-      #           )
-      #         )
-      # ),
+      tabItem(tabName = "analyse_proteomics",
+              h2("Perform proteomics searches using your custom database"),
+              h5("This module is under development. Currently, users need to run FragPipe externally and return once complete."),
+              # fluidRow(
+              #   column(4,
+              #          selectInput("protease", label = "Protease:",
+              #                      choices = list("trypsin" = "trypsin"),
+              #                      selected = "trypsin"),
+              #          numericInput("mm_cpu",
+              #                       label = "CPUs",
+              #                       value = 1),
+              #          fileInput("user_mm_fasta", "Upload 'proteome_database.fasta'", NULL, buttonLabel = "Browse...", multiple = FALSE),
+              #          fileInput("user_mm_data", "Upload mzML/raw file(s):", NULL, buttonLabel = "Browse...", multiple = TRUE),
+              #          actionButton("proteomics_submit_button", "Submit", class = "btn btn-primary")
+              #   ),
+              #   column(6,
+              #          HTML("<h3>Download your results:</h3>"),
+              #          downloadButton("proteomics_download_button", "Download results (zip)", disabled = TRUE, style = "width:70%;"), # initially disabled
+              #          div(id = "proteomics-loading-container", class = "loading-container", div(class = "spinner"))
+              #   )
+              # )
+      ),
       tabItem(tabName = "integration", 
               h2("Integrate proteomics results with transcriptomics"),
-              h5("Creates BED12s and GTFs of peptides, ORFs and transcripts for visualisation and produces summary data"),
+              h5("Creates a combined GTF and BED12s of peptides, ORFs and transcripts for visualisation, along with summary data and a report."),
               fluidRow(
                 column(6,
                        fileInput("user_proteomics_file", "Upload proteomics results:", NULL, buttonLabel = "Browse...", multiple = FALSE),
@@ -202,8 +194,11 @@ ui <- dashboardPage(
               )
       ),
       tabItem(tabName = "visualisation", 
-              h2("Visualise results"),
-              h5("Plots your results using the GTFs created in the integration module."),
+              fluidRow(
+                column(12, 
+                       h2("Visualise results", align = "left") 
+                )
+              ),
               fluidRow(
                 column(4,
                        fileInput("user_vis_gtf_file", "Upload 'combined_annotations.gtf' file:", NULL, buttonLabel = "Browse...", multiple = FALSE),
@@ -212,15 +207,25 @@ ui <- dashboardPage(
                        actionButton("vis_submit_button", "Submit", class = "btn btn-primary")
                 ),
                 column(8,
-                       selectInput("gene_selector", "Select Gene", choices = NULL),
-                       checkboxInput("uniq_map_peptides", "Only display genes encoding ORFs with uniquely mapped peptides", value = FALSE),
+                       selectInput("gene_selector", "Select a gene:", choices = NULL),
+                       actionLink("toggle_filters", "▼ Gene list filtering options", class = "toggle-filters"), # toggle filtering options
+                       div(id = "filters_container", style = "display:none;", # hidden by default
+                           p("UMP = uniquely mapped peptide. Peptides that only mapped to a single protein entry in the protein database."),
+                           checkboxInput("uniq_map_peptides", "ORFs with UMPs", value = FALSE),
+                           checkboxInput("lncRNA_peptides", "long non-coding RNAs with UMPs", value = FALSE),
+                           checkboxInput("novel_txs", "novel transcript isoforms with UMPs", value = FALSE),
+                           checkboxInput("novel_txs_distinguished", "novel transcript isoforms distinguished by UMPs", value = FALSE),
+                           checkboxInput("unann_orfs", "unannotated ORFs with UMPs", value = FALSE),
+                           checkboxInput("uorf_5", "5' uORFs with UMPs", value = FALSE),
+                           checkboxInput("dorf_3", "3' dORFs with UMPs", value = FALSE)
+                       ),
                        div(id = "vis-loading-container", class = "loading-container", div(class = "spinner")),
                        plotOutput("plot"),
-                       downloadButton("vis_download_button", "Download plot", disabled = TRUE, class = "spacing") # initially disabled
+                       downloadButton("vis_download_button", "Download plot", disabled = TRUE, class = "spacing")
                 )
               )
       )
     )
   ),  
-  skin = "purple"
+  skin = "blue"
 )
