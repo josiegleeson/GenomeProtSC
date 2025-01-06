@@ -16,6 +16,7 @@
   - [Visualisation](#4-visualisation-1)
 
 ## Installation
+Note: Option 1 and 2 are under development and not yet available.
 
 ### Option 1 (recommended): Run the shiny application with Docker
 Make sure you have [Docker](https://docs.docker.com/engine/install/) installed and the application running in the background before you begin.
@@ -36,7 +37,6 @@ To stop the container, close the web browser tab and head back to the terminal w
 ### Option 2 (recommmended for downstream analysis only): Access GenomeProtSC online
 https://genomeprotSC.researchsoftware.unimelb.edu.au/
 
-
 ### Option 3: Locally install the shiny application
 
 The application has substantial dependencies. 
@@ -46,18 +46,25 @@ Clone this repository:
 git clone https://github.com/josiegleeson/GenomeProtSC.git
 ```
 
-Unzip the uniprot+openprot reference file in the GenomeProt/data directory.
+Unzip the uniprot+openprot reference file in the GenomeProtSC/data directory.
 ```
-cd GenomeProtSC/GenomeProtSC/data
+cd GenomeProtSC/data
 unzip openprot_uniprotDb_hs.txt.zip
 unzip *
+```
+
+Place the reference genome FASTA in the GenomeProtSC/refs directory and re-name (human.fa or mouse.fa).
+```
+cd GenomeProtSC/refs
+cp human.reference.genome.fa .
+mv human.reference.genome.fa human.fa
 ```
 
 ## General usage 
 
 GenomeProtSC is an integrated proteogenomics platform with four modules: 1) database generation, 2) proteomics (under development), 3) integration, and 4) visualisation.
 
-### 1. Database generation
+### 1. Generate database
 
 The first module processes long-read single-cell data with FLAMES and generates a custom proteome database to perform proteomics searches. The module accepts RNA sequencing FASTQ files from 10X single-cell long-read sequencing. The main output from this module is the results from FLAMES (single-cell transcriptomics), a FASTA file with candidate protein sequences and a metadata file with details of each candidate protein. 
 
@@ -65,12 +72,15 @@ GenomeProtSC currently supports open reading frame (ORF) identification and data
 
 #### Inputs:
 
-- FASTQ file(s) (one per sample)
+- FASTQ file(s) (one per sample, can be gzipped)
+- Reference GENCODE annotation GTF file
+- Reference genome FASTA file
 
 #### Outputs:
 
-- FLAMES output 
-- FASTA file with protein sequences 
+- FLAMES output
+- Seurat output and gene/transcript counts
+- FASTA file with protein sequences
 - Metadata file detailing each protein entry
 
 ### 2. Proteomics
@@ -81,25 +91,35 @@ Currently under development. Please use FragPipe to process proteomics data with
 
 This module integrates proteomics and transcriptomics data. Peptides are associated back to transcript isoforms and mapped to spliced genomic coordinates for downstream visualisation. This generates BED12 file of transcripts, ORFs and peptides for visualisation in the UCSC genome browser and a combined GTF file for visualisation within the app. An html report is also created that provides a summary of identified known and novel transcripts, uniquely mapping peptides, and known and novel ORFs.
 
-#### Key outputs:
+#### Inputs:
 
-- Peptide-to-transcript mappings with spliced genomic coordinates. 
-- BED12 files for visualisation in UCSC genome browser. 
-- HTML report summarising identified transcripts, peptides and ORFs. 
+- Database files generated in Module 1
+- Proteomics peptide data
+
+#### Outputs:
+
+- Peptide-to-transcript mappings with spliced genomic coordinates (CSV)
+- BED12 files for visualisation in UCSC genome browser
+- HTML report summarising identified transcripts, peptides and ORFs
 
 ### 4. Visualisation
 
 The visualisation module uses ggtranscript to generate peptide mapping plots along transcript isoforms with quantitative peptide intensities and transcript expression data (median per cell cluster). This allows users to visualise transcript and peptide abundance across different experimental conditions. This module requires the combined GTF file generated in the integration step, and optionally inputs single-cell transcript counts from Module 1 and peptide intensities from external proteomics analysis. We have included gene filtering options to quickly search for features of interest, such as genes with unknown functions.
 
-#### Features:
+#### Inputs:
 
-- Requires `combined_annotations.gtf` (from Module 3).
-- Optionally input single-cell transcript counts and peptide intensities.
-- Allows export of plots as PDFs. 
+- GTF from Module 3
+- Single-cell transcript counts and peptide intensities (optional)
+
+#### Output:
+
+- Peptide mappings along transcript isoforms (with optional quantitative heatmaps)
+- Allows export of plots as PDFs
+
 
 ## Detailed input and output descriptions
 
-### 1. Database generation
+### 1. Generate database
 
 | Input  | File Type | Required? | Description     |
 |------------------------------------|-----------|-----------|-----------------------------------------------------------------------------------------------|
@@ -114,7 +134,9 @@ The visualisation module uses ggtranscript to generate peptide mapping plots alo
 | Database transcripts | proteome_database_transcripts.gtf | GTF  | Annotations of transcripts used to generate the database   |
 | Single-cell gene counts | gene_counts.txt  | TXT  | Gene count file with cells as columns and transcripts as rows  |
 | Single-cell transcript counts | transcript_counts.txt  | TXT  | Transcript count file with cells as columns and transcripts as rows  |
-
+| Seurat object	| seurat_object.rds	| RDS	| Seurat object that can be loaded into R with ‘readRDS’ |
+| Seurat cell clusters	| sample_cellbarcode_cellcluster.txt	| TXT	| Metadata file with clusters per cell per sample |
+| UMAP plot	| UMAP.pdf	| PDF	| UMAP plot coloured by cell clusters |
 
 Proteome FASTA examples and header formats: 
 ```
